@@ -50,7 +50,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     public List<EmployeeResponseDto> fetchAllEmployees(){
-        List<EmployeeResponseDto> employeeResponseDtoList = new ArrayList<EmployeeResponseDto>();
+        List<EmployeeResponseDto> employeeResponseDtoList = new ArrayList<>();
         List<Employee> employeeList = employeeRepository.findAll();
         if (!CollectionUtils.isEmpty(employeeList)) {
             for (Employee employee : employeeList) {
@@ -75,39 +75,39 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 
-    public String updateEmployee(EmployeeRequestDto newEmployeeRequestDto, String id) {
-        if (newEmployeeRequestDto.getName()!=null && newEmployeeRequestDto.getRole()!=null && newEmployeeRequestDto.getEmail()!=null) {
-            if (!newEmployeeRequestDto.getName().isEmpty() && !newEmployeeRequestDto.getRole().isEmpty()) {
-                if (emailPattern.matcher(newEmployeeRequestDto.getEmail()).matches()) {
+    public String updateEmployee(EmployeeResponseDto newEmployeeResponseDto) {
+        if (newEmployeeResponseDto.getName()!=null && newEmployeeResponseDto.getRole()!=null && newEmployeeResponseDto.getEmail()!=null) {
+            if (!newEmployeeResponseDto.getName().isEmpty() && !newEmployeeResponseDto.getRole().isEmpty()) {
+                if (emailPattern.matcher(newEmployeeResponseDto.getEmail()).matches()) {
                     Employee employee;
                     try {
-                        UUID uuid = UUID.fromString(id);
+                        UUID uuid = UUID.fromString(newEmployeeResponseDto.getId());
                         Optional<Employee> employeeMatch = employeeRepository.findById(uuid);
                         if (employeeMatch.isPresent()) {
                             employee = employeeMatch.get();
-                            employee.setName(newEmployeeRequestDto.getName());
-                            employee.setRole(newEmployeeRequestDto.getRole());
-                            employee.setEmail(newEmployeeRequestDto.getEmail());
+                            employee.setName(newEmployeeResponseDto.getName());
+                            employee.setRole(newEmployeeResponseDto.getRole());
+                            employee.setEmail(newEmployeeResponseDto.getEmail());
                         } else {
-                            employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
+                            employee = employeeDtoMapper.toEmployee(newEmployeeResponseDto);
                         }
                     }
                     catch (IllegalArgumentException exception){
-                        employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
+                        employee = employeeDtoMapper.toEmployee(newEmployeeResponseDto);
                     }
                     employeeRepository.save(employee);
-                    return employee.getId().toString();
+                    return "Employee: "+employee.getId().toString()+" updated successfully";
                 }
                 else {
-                    return "Employee Email provided is Invalid";
+                    return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Email provided is invalid";
                 }
             }
             else {
-                return "Some or all of the Employee details provided are empty";
+                return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Some or all of the Employee details provided are empty";
             }
         }
         else{
-            return "Some or all of the Employee details are not provided";
+            return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Some or all of the Employee details are not provided";
         }
     }
 
@@ -115,7 +115,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         try{
             UUID uuid = UUID.fromString(id);
             employeeRepository.deleteById(uuid);
-            return "Deleted Employee: "+id+" successfully";
+            return "Employee: "+id+" deleted successfully";
         }
         catch (EmptyResultDataAccessException exception){
             throw new EmployeeNotFoundException(id);

@@ -6,6 +6,8 @@ import java.util.UUID;
 import com.example.empmanager.dto.EmployeeRequestDto;
 import com.example.empmanager.dto.EmployeeResponseDto;
 import com.example.empmanager.service.EmployeeService;
+import com.example.empmanager.service.EmployeeUpdateMessageReceiver;
+import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +23,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class EmployeeController {
     @Autowired
     private EmployeeService employeeService;
+
+    @Autowired
+    private EmployeeUpdateMessageReceiver employeeUpdateMessageReceiver;
+
+    @Autowired
+    public EmployeeController() {
+    }
 
     @PostMapping(path="/add")
     String addNewEmployee (@RequestBody EmployeeRequestDto newEmployeeRequestDto) {
@@ -39,7 +48,8 @@ public class EmployeeController {
 
     @PutMapping(path="/update/{id}")
     String updateEmployee(@RequestBody EmployeeRequestDto newEmployeeRequestDto, @PathVariable String id) {
-        return employeeService.updateEmployee(newEmployeeRequestDto, id);
+        employeeUpdateMessageReceiver.send(newEmployeeRequestDto, id);
+        return "Employee update received";
     }
 
     @DeleteMapping(path="/delete/{id}")

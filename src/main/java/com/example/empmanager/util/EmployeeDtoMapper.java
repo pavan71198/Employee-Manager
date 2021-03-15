@@ -18,4 +18,12 @@ public class EmployeeDtoMapper {
     public Employee toEmployee(EmployeeRequestDto employeeRequestDto){
         return new Employee(employeeRequestDto.getName(), employeeRequestDto.getRole(), employeeRequestDto.getEmail());
     }
+
+    public Employee toEmployee(EmployeeResponseDto employeeResponseDto){
+        return new Employee(employeeResponseDto.getName(), employeeResponseDto.getRole(), employeeResponseDto.getEmail());
+    }
+
+    public EmployeeResponseDto toResponseDto(EmployeeRequestDto employeeRequestDto, String id){
+        return new EmployeeResponseDto(id, employeeRequestDto.getName(), employeeRequestDto.getRole(), employeeRequestDto.getEmail());
+    }
 }
