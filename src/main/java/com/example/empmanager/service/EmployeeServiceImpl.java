@@ -9,7 +9,10 @@ import com.example.empmanager.repository.EmployeeRepository;
 import com.example.empmanager.dto.EmployeeRequestDto;
 import com.example.empmanager.dto.EmployeeResponseDto;
 import com.example.empmanager.util.EmployeeDtoMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -28,13 +31,26 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     Pattern emailPattern = Pattern.compile(emailRegex);
 
+    @Cacheable(value = "employees", key="#root.methodName")
+    public List<EmployeeResponseDto> fetchAllEmployees(){
+        List<EmployeeResponseDto> employeeResponseDtoList = new ArrayList<>();
+        List<Employee> employeeList = employeeRepository.findAll();
+        if (!CollectionUtils.isEmpty(employeeList)) {
+            for (Employee employee : employeeList) {
+                employeeResponseDtoList.add(employeeDtoMapper.toResponseDto(employee));
+            }
+        }
+        return employeeResponseDtoList;
+    }
+
     public String addNewEmployee (EmployeeRequestDto newEmployeeRequestDto) {
         if (newEmployeeRequestDto.getName()!=null && newEmployeeRequestDto.getRole()!=null && newEmployeeRequestDto.getEmail()!=null) {
             if (!newEmployeeRequestDto.getName().isEmpty() && !newEmployeeRequestDto.getRole().isEmpty()) {
                 if (emailPattern.matcher(newEmployeeRequestDto.getEmail()).matches()) {
                     Employee newEmployee = new Employee(newEmployeeRequestDto.getName(), newEmployeeRequestDto.getRole(), newEmployeeRequestDto.getEmail());
                     employeeRepository.save(newEmployee);
-                    return "Saved: " + newEmployee.getId();
+                    String id = newEmployee.getId().toString();
+                    return "Saved: " + id;
                 }
                 else {
                     return "Invalid Employee Email: " + newEmployeeRequestDto.toString();
@@ -49,17 +65,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 
-    public List<EmployeeResponseDto> fetchAllEmployees(){
-        List<EmployeeResponseDto> employeeResponseDtoList = new ArrayList<>();
-        List<Employee> employeeList = employeeRepository.findAll();
-        if (!CollectionUtils.isEmpty(employeeList)) {
-            for (Employee employee : employeeList) {
-                employeeResponseDtoList.add(employeeDtoMapper.toResponseDto(employee));
-            }
-        }
-        return employeeResponseDtoList;
-    }
-
+    @Cacheable(value="employees", key="#id")
     public EmployeeResponseDto fetchEmployeeById(String id) {
         try {
             UUID uuid = UUID.fromString(id);
@@ -75,42 +81,50 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 
-    public String updateEmployee(EmployeeResponseDto newEmployeeResponseDto) {
-        if (newEmployeeResponseDto.getName()!=null && newEmployeeResponseDto.getRole()!=null && newEmployeeResponseDto.getEmail()!=null) {
-            if (!newEmployeeResponseDto.getName().isEmpty() && !newEmployeeResponseDto.getRole().isEmpty()) {
-                if (emailPattern.matcher(newEmployeeResponseDto.getEmail()).matches()) {
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "employees", key="#newEmployeeRequestDto.getId()"),
+            @CacheEvict(cacheNames = "employees", key="'fetchAllEmployees'")
+    })
+    public String updateEmployee(EmployeeResponseDto newEmployeeRequestDto) {
+        if (newEmployeeRequestDto.getName()!=null && newEmployeeRequestDto.getRole()!=null && newEmployeeRequestDto.getEmail()!=null) {
+            if (!newEmployeeRequestDto.getName().isEmpty() && !newEmployeeRequestDto.getRole().isEmpty()) {
+                if (emailPattern.matcher(newEmployeeRequestDto.getEmail()).matches()) {
                     Employee employee;
                     try {
-                        UUID uuid = UUID.fromString(newEmployeeResponseDto.getId());
+                        UUID uuid = UUID.fromString(newEmployeeRequestDto.getId());
                         Optional<Employee> employeeMatch = employeeRepository.findById(uuid);
                         if (employeeMatch.isPresent()) {
                             employee = employeeMatch.get();
-                            employee.setName(newEmployeeResponseDto.getName());
-                            employee.setRole(newEmployeeResponseDto.getRole());
-                            employee.setEmail(newEmployeeResponseDto.getEmail());
+                            employee.setName(newEmployeeRequestDto.getName());
+                            employee.setRole(newEmployeeRequestDto.getRole());
+                            employee.setEmail(newEmployeeRequestDto.getEmail());
                         } else {
-                            employee = employeeDtoMapper.toEmployee(newEmployeeResponseDto);
+                            employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
                         }
                     }
                     catch (IllegalArgumentException exception){
-                        employee = employeeDtoMapper.toEmployee(newEmployeeResponseDto);
+                        employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
                     }
                     employeeRepository.save(employee);
                     return "Employee: "+employee.getId().toString()+" updated successfully";
                 }
                 else {
-                    return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Email provided is invalid";
+                    return "Employee: "+newEmployeeRequestDto.getId()+" update unsuccessful. Email provided is invalid";
                 }
             }
             else {
-                return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Some or all of the Employee details provided are empty";
+                return "Employee: "+newEmployeeRequestDto.getId()+" update unsuccessful. Some or all of the Employee details provided are empty";
             }
         }
         else{
-            return "Employee: "+newEmployeeResponseDto.getId()+" update unsuccessful. Some or all of the Employee details are not provided";
+            return "Employee: "+newEmployeeRequestDto.getId()+" update unsuccessful. Some or all of the Employee details are not provided";
         }
     }
 
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "employees", key="#id"),
+            @CacheEvict(cacheNames = "employees", key="'fetchAllEmployees'")
+    })
     public String deleteEmployee (String id) {
         try{
             UUID uuid = UUID.fromString(id);

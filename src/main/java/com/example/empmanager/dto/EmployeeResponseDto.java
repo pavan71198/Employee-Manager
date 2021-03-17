@@ -1,8 +1,9 @@
 package com.example.empmanager.dto;
 
+import java.io.Serializable;
 import java.util.UUID;
 
-public class EmployeeResponseDto {
+public class EmployeeResponseDto implements Serializable {
     private String id;
     private String name;
     private String role;
