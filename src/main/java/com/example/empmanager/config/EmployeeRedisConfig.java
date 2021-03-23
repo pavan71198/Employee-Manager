@@ -1,32 +1,34 @@
 package com.example.empmanager.config;
 
-import org.redisson.Redisson;
-import org.redisson.api.RedissonClient;
-import org.redisson.config.Config;
-import org.redisson.spring.cache.CacheConfig;
-import org.redisson.spring.cache.RedissonSpringCacheManager;
-import org.springframework.cache.CacheManager;
+import com.example.empmanager.dto.EmployeeResponseDto;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 
 @Configuration
 public class EmployeeRedisConfig {
 
-    @Bean(destroyMethod="shutdown")
-    RedissonClient redisson() {
-        Config config = new Config();
-        config.useSingleServer()
-                .setAddress("redis://127.0.0.1:6379");
-        return Redisson.create(config);
+    @Value("${spring.redis.host}")
+    String host;
+    @Value("${spring.redis.port}")
+    int port;
+
+    @Bean
+    public JedisConnectionFactory redisConnectionFactory() {
+        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(host, port);
+        return new JedisConnectionFactory(config);
     }
 
     @Bean
-    CacheManager cacheManager(RedissonClient redissonClient) {
-        Map<String, CacheConfig> config = new HashMap<>();
-        config.put("employees", new CacheConfig(10*60*1000, 5*60*1000));
-        return new RedissonSpringCacheManager(redissonClient, config);
+    public RedisTemplate<String, EmployeeResponseDto> redisTemplate() {
+        RedisTemplate<String, EmployeeResponseDto> redisTemplate = new RedisTemplate<String, EmployeeResponseDto>();
+        redisTemplate.setConnectionFactory(redisConnectionFactory());
+        return redisTemplate;
     }
+
+
+
 }

@@ -9,10 +9,7 @@ import com.example.empmanager.repository.EmployeeRepository;
 import com.example.empmanager.dto.EmployeeRequestDto;
 import com.example.empmanager.dto.EmployeeResponseDto;
 import com.example.empmanager.util.EmployeeDtoMapper;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -21,6 +18,9 @@ import org.springframework.util.CollectionUtils;
 public class EmployeeServiceImpl implements EmployeeService {
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private EmployeeRedisService employeeRedisService;
 
     private final EmployeeDtoMapper employeeDtoMapper = new EmployeeDtoMapper();
 
@@ -31,13 +31,16 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     Pattern emailPattern = Pattern.compile(emailRegex);
 
-    @Cacheable(value = "employees", key="#root.methodName")
+    EmployeeResponseDto errorEmployeeResponseDto = new EmployeeResponseDto("-1","","","");
+
     public List<EmployeeResponseDto> fetchAllEmployees(){
         List<EmployeeResponseDto> employeeResponseDtoList = new ArrayList<>();
         List<Employee> employeeList = employeeRepository.findAll();
         if (!CollectionUtils.isEmpty(employeeList)) {
             for (Employee employee : employeeList) {
-                employeeResponseDtoList.add(employeeDtoMapper.toResponseDto(employee));
+                EmployeeResponseDto employeeResponseDto = employeeDtoMapper.toResponseDto(employee);
+                employeeRedisService.update(employeeResponseDto.getId(), employeeResponseDto);
+                employeeResponseDtoList.add(employeeResponseDto);
             }
         }
         return employeeResponseDtoList;
@@ -50,6 +53,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                     Employee newEmployee = new Employee(newEmployeeRequestDto.getName(), newEmployeeRequestDto.getRole(), newEmployeeRequestDto.getEmail());
                     employeeRepository.save(newEmployee);
                     String id = newEmployee.getId().toString();
+                    employeeRedisService.delete(id);
                     return "Saved: " + id;
                 }
                 else {
@@ -65,26 +69,32 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 
-    @Cacheable(value="employees", key="#id")
     public EmployeeResponseDto fetchEmployeeById(String id) {
         try {
+            EmployeeResponseDto cachedEmployeeResponseDto = employeeRedisService.get(id);
+            if (cachedEmployeeResponseDto != null){
+                if (cachedEmployeeResponseDto.getId().equals("-1")){
+                    throw new EmployeeNotFoundException(id);
+                }
+                return cachedEmployeeResponseDto;
+            }
             UUID uuid = UUID.fromString(id);
             Optional<Employee> employeeMatch = employeeRepository.findById(uuid);
             if (employeeMatch.isPresent()) {
-                return employeeDtoMapper.toResponseDto(employeeMatch.get());
+                EmployeeResponseDto employeeResponseDto = employeeDtoMapper.toResponseDto(employeeMatch.get());
+                employeeRedisService.update(id, employeeResponseDto);
+                return employeeResponseDto;
             } else {
+                employeeRedisService.update(id, errorEmployeeResponseDto);
                 throw new EmployeeNotFoundException(id);
             }
         }
         catch (IllegalArgumentException exception){
+            employeeRedisService.update(id, errorEmployeeResponseDto);
             throw new EmployeeNotFoundException(id);
         }
     }
 
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "employees", key="#newEmployeeRequestDto.getId()"),
-            @CacheEvict(cacheNames = "employees", key="'fetchAllEmployees'")
-    })
     public String updateEmployee(EmployeeResponseDto newEmployeeRequestDto) {
         if (newEmployeeRequestDto.getName()!=null && newEmployeeRequestDto.getRole()!=null && newEmployeeRequestDto.getEmail()!=null) {
             if (!newEmployeeRequestDto.getName().isEmpty() && !newEmployeeRequestDto.getRole().isEmpty()) {
@@ -94,15 +104,17 @@ public class EmployeeServiceImpl implements EmployeeService {
                         UUID uuid = UUID.fromString(newEmployeeRequestDto.getId());
                         Optional<Employee> employeeMatch = employeeRepository.findById(uuid);
                         if (employeeMatch.isPresent()) {
+                            employeeRedisService.delete(newEmployeeRequestDto.getId());
                             employee = employeeMatch.get();
                             employee.setName(newEmployeeRequestDto.getName());
                             employee.setRole(newEmployeeRequestDto.getRole());
                             employee.setEmail(newEmployeeRequestDto.getEmail());
                         } else {
+                            employeeRedisService.update(newEmployeeRequestDto.getId(), errorEmployeeResponseDto);
                             employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
                         }
-                    }
-                    catch (IllegalArgumentException exception){
+                    } catch (IllegalArgumentException exception) {
+                        employeeRedisService.update(newEmployeeRequestDto.getId(), errorEmployeeResponseDto);
                         employee = employeeDtoMapper.toEmployee(newEmployeeRequestDto);
                     }
                     employeeRepository.save(employee);
@@ -121,17 +133,16 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
     }
 
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "employees", key="#id"),
-            @CacheEvict(cacheNames = "employees", key="'fetchAllEmployees'")
-    })
+
     public String deleteEmployee (String id) {
         try{
             UUID uuid = UUID.fromString(id);
             employeeRepository.deleteById(uuid);
+            employeeRedisService.delete(id);
             return "Employee: "+id+" deleted successfully";
         }
         catch (EmptyResultDataAccessException exception){
+            employeeRedisService.update(id, errorEmployeeResponseDto);
             throw new EmployeeNotFoundException(id);
         }
     }
