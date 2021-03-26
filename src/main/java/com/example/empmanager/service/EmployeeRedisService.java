@@ -17,19 +17,36 @@ public class EmployeeRedisService {
     @Autowired
     private RedisTemplate<String, EmployeeResponseDto> redisTemplate;
     @Resource(name="redisTemplate")
-    private ValueOperations<String, EmployeeResponseDto> valueOperations;
+    private HashOperations<String, String, EmployeeResponseDto> dataHashOperations;
+    @Resource(name="redisTemplate")
+    private HashOperations<String, String, Long> ttlHashOperations;
+    private final String DATAKEY = "EMPLOYEES";
+    private final String TTLKEY = "EMPLOYEES_TTL";
     @Value("${spring.redis.employee.ttl}")
-    private long ttl;
+    private Long ttl;
 
     public void update(String id, EmployeeResponseDto employeeResponseDto){
-        valueOperations.set(id, employeeResponseDto, ttl, TimeUnit.MINUTES);
+        dataHashOperations.put(DATAKEY, id, employeeResponseDto);
+        ttlHashOperations.put(TTLKEY, id, System.currentTimeMillis()+ttl*60*1000);
     }
 
     public void delete(String id){
-        redisTemplate.delete(id);
+        dataHashOperations.delete(DATAKEY, id);
+        ttlHashOperations.delete(TTLKEY, id);
     }
 
     public EmployeeResponseDto get(String id){
-        return valueOperations.get(id);
+        Long cacheTtl = ttlHashOperations.get(TTLKEY, id);
+        if (cacheTtl != null) {
+            if (cacheTtl < System.currentTimeMillis()) {
+                dataHashOperations.delete(DATAKEY, id);
+                ttlHashOperations.delete(TTLKEY, id);
+                return null;
+            }
+            else{
+                return dataHashOperations.get(DATAKEY, id);
+            }
+        }
+        return null;
     }
 }
