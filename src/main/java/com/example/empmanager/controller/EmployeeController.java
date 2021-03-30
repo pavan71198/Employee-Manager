@@ -1,13 +1,11 @@
 package com.example.empmanager.controller;
 
 import java.util.List;
-import java.util.UUID;
 
 import com.example.empmanager.dto.EmployeeRequestDto;
 import com.example.empmanager.dto.EmployeeResponseDto;
 import com.example.empmanager.service.EmployeeService;
-import com.example.empmanager.service.EmployeeUpdateMessageReceiver;
-import org.springframework.amqp.core.AmqpTemplate;
+import com.example.empmanager.service.publisher.EmployeeUpdatePublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,7 +23,7 @@ public class EmployeeController {
     private EmployeeService employeeService;
 
     @Autowired
-    private EmployeeUpdateMessageReceiver employeeUpdateMessageReceiver;
+    private EmployeeUpdatePublisher employeeUpdatePublisher;
 
     @Autowired
     public EmployeeController() {
@@ -49,7 +47,7 @@ public class EmployeeController {
 
     @PutMapping(path="/update/{id}")
     String updateEmployee(@RequestBody EmployeeRequestDto newEmployeeRequestDto, @PathVariable String id) {
-        employeeUpdateMessageReceiver.send(newEmployeeRequestDto, id);
+        employeeUpdatePublisher.send(newEmployeeRequestDto, id);
         return "Employee update received";
     }
 
